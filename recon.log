@@ -1,0 +1,9 @@
+2025/07/09 16:27:07 main.go:59: === RECON SCANNER STARTING ===
+2025/07/09 16:27:07 main.go:60: Go Version: go1.24.4
+2025/07/09 16:27:07 main.go:61: Architecture: linux/amd64
+2025/07/09 16:27:07 main.go:62: CPU Cores: 2
+2025/07/09 16:27:07 main.go:63: High Performance Mode: true
+2025/07/09 16:27:07 main.go:116: Loaded 5 domains from top10milliondomains.csv
+2025/07/09 16:27:07 main.go:137: Starting reconnaissance with 5 domains
+2025/07/09 16:27:07 scheduler.go:91: Next mode change to FULL POWER scheduled for 2025-07-10 05:37:00 UTC (in 13h9m52.347813051s)
+2025/07/09 16:27:08 main.go:145: === RECON SCANNER COMPLETED ===

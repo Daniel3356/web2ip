@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +18,34 @@ import (
 )
 
 func main() {
+	// Parse command line flags
+	var highPerformance = flag.Bool("high-performance", false, "Enable high performance mode with 800 workers")
+	var showHelp = flag.Bool("help", false, "Show help information")
+	flag.Parse()
+	
+	if *showHelp {
+		fmt.Println("🚀 Web2IP High-Performance Scanner")
+		fmt.Println("=====================================")
+		fmt.Println()
+		fmt.Println("Usage: ./web2ip [OPTIONS]")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -high-performance    Enable high performance mode with 800 workers")
+		fmt.Println("  -help               Show this help message")
+		fmt.Println()
+		fmt.Println("High Performance Mode Features:")
+		fmt.Println("  • 800 concurrent workers for maximum throughput")
+		fmt.Println("  • Intelligent memory management for 8GB RAM")
+		fmt.Println("  • Thermal monitoring and dynamic throttling")
+		fmt.Println("  • Connection pooling and resource management")
+		fmt.Println("  • Continuous 24/7 operation without restarts")
+		fmt.Println("  • Detailed logging and monitoring capabilities")
+		fmt.Println("  • Graceful degradation under system pressure")
+		fmt.Println("  • System health monitoring and alerts")
+		fmt.Println()
+		os.Exit(0)
+	}
+	
 	// Set up logging with timestamps
 	logFile, err := os.OpenFile("recon.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -31,12 +60,24 @@ func main() {
 	log.Printf("Go Version: %s", runtime.Version())
 	log.Printf("Architecture: %s/%s", runtime.GOOS, runtime.GOARCH)
 	log.Printf("CPU Cores: %d", runtime.NumCPU())
+	log.Printf("High Performance Mode: %v", *highPerformance)
 
 	fmt.Println("🚀 Recon Scanner System - Raspberry Pi 5 Optimized")
 	fmt.Printf("💻 Running on %s/%s with %d CPU cores\n", runtime.GOOS, runtime.GOARCH, runtime.NumCPU())
+	
+	if *highPerformance {
+		fmt.Println("🔥 HIGH PERFORMANCE MODE ENABLED")
+		fmt.Println("   800 concurrent workers | 8GB RAM optimized | 24/7 operation")
+	}
 
 	// Initialize configuration
 	cfg := config.New()
+	
+	// Enable high performance mode if requested
+	if *highPerformance {
+		cfg.EnableHighPerformanceMode()
+		fmt.Println("🚀 High performance mode activated!")
+	}
 	
 	// Display current time zone and schedule
 	location, err := time.LoadLocation(cfg.Timezone)
