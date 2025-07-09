@@ -1,0 +1,54 @@
+# Binaries
+recon-scanner
+web2ip
+
+# Logs
+*.log
+recon.log
+
+# Database files
+*.db
+recon_results.db
+
+# CSV data files (optional - uncomment if you want to exclude)
+# *.csv
+# top10milliondomains.csv
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Performance monitoring files
+*.pprof
+*.prof
+
+# Core dumps
+core.*
