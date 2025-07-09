@@ -1,0 +1,5 @@
+2025/07/09 12:36:17 System configured for high performance: GOMAXPROCS=8
+2025/07/09 12:36:17 High-performance scanner started with 800 max workers
+2025/07/09 12:36:19 Loaded 10000001 domains from top10milliondomains.csv
+2025/07/09 12:36:47 Scaled up workers by 25, total: 75
+2025/07/09 12:36:47 System Health Check - CPU: 52.0°C, Memory: 29.1%, Workers: 50, Processed: 67179, Errors: 0.00%
