@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/recon-scanner/internal/config"
+	"github.com/recon-scanner/internal/monitor"
 )
 
 type Scheduler struct {
@@ -19,15 +20,17 @@ type Scheduler struct {
 	modeChangeTimer *time.Timer
 	ctx             context.Context
 	cancel          context.CancelFunc
+	healthMonitor   *monitor.HealthMonitor
 }
 
 func New(cfg *config.Config) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	scheduler := &Scheduler{
-		config: cfg,
-		ctx:    ctx,
-		cancel: cancel,
+		config:        cfg,
+		ctx:           ctx,
+		cancel:        cancel,
+		healthMonitor: monitor.NewHealthMonitor(cfg),
 	}
 	
 	scheduler.updateCurrentMode()
@@ -35,10 +38,12 @@ func New(cfg *config.Config) *Scheduler {
 }
 
 func (s *Scheduler) Start() {
+	s.healthMonitor.Start()
 	go s.run()
 }
 
 func (s *Scheduler) Stop() {
+	s.healthMonitor.Stop()
 	if s.modeChangeTimer != nil {
 		s.modeChangeTimer.Stop()
 	}
@@ -88,7 +93,9 @@ func (s *Scheduler) scheduleNextModeChange() {
 }
 
 func (s *Scheduler) updateCurrentMode() {
-	if s.config.IsFullPowerTime() {
+	if s.config.EnableHighPerformance {
+		s.currentMode = config.HighPerformanceMode
+	} else if s.config.IsFullPowerTime() {
 		s.currentMode = config.FullPowerMode
 	} else {
 		s.currentMode = config.ConservationMode
@@ -182,11 +189,45 @@ func (s *Scheduler) WaitForOptimalTime(operation string) {
 }
 
 func (s *Scheduler) ShouldThrottle() bool {
+	// In high performance mode, use health monitor for throttling
+	if s.config.EnableHighPerformance {
+		return s.healthMonitor.ShouldThrottle()
+	}
+	
+	// In other modes, use time-based throttling
 	return !s.IsFullPowerMode()
 }
 
 func (s *Scheduler) GetAdaptiveDelay(baseDelay time.Duration) time.Duration {
 	profile := s.config.GetCurrentProfile()
+	
+	// In high performance mode, use health-based adaptive delay
+	if s.config.EnableHighPerformance {
+		health := s.healthMonitor.GetHealth()
+		
+		// Increase delay based on system pressure
+		multiplier := 1.0
+		
+		if health.MemoryUsage > 0.8 {
+			multiplier *= 2.0
+		} else if health.MemoryUsage > 0.6 {
+			multiplier *= 1.5
+		}
+		
+		if health.CPUTemperature > 75.0 {
+			multiplier *= 2.0
+		} else if health.CPUTemperature > 65.0 {
+			multiplier *= 1.5
+		}
+		
+		if health.ErrorRate > 0.1 {
+			multiplier *= 3.0
+		} else if health.ErrorRate > 0.05 {
+			multiplier *= 2.0
+		}
+		
+		return time.Duration(float64(profile.RequestDelay) * multiplier)
+	}
 	
 	// During conservation mode, use configured delay
 	if !s.IsFullPowerMode() {
@@ -200,4 +241,23 @@ func (s *Scheduler) GetAdaptiveDelay(baseDelay time.Duration) time.Duration {
 	}
 	
 	return profile.RequestDelay
+}
+
+func (s *Scheduler) GetHealthMonitor() *monitor.HealthMonitor {
+	return s.healthMonitor
+}
+
+func (s *Scheduler) GetOptimalBatchSize(baseBatchSize int) int {
+	if s.config.EnableHighPerformance {
+		return s.healthMonitor.GetOptimalBatchSize(baseBatchSize)
+	}
+	return baseBatchSize
+}
+
+func (s *Scheduler) RecordError() {
+	s.healthMonitor.RecordError()
+}
+
+func (s *Scheduler) RecordRequest() {
+	s.healthMonitor.RecordRequest()
 }

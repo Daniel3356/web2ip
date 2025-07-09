@@ -9,6 +9,7 @@ import (
 	"github.com/recon-scanner/internal/config"
 	"github.com/recon-scanner/internal/database"
 	"github.com/recon-scanner/internal/dns"
+	"github.com/recon-scanner/internal/pool"
 	"github.com/recon-scanner/internal/portscanner"
 	"github.com/recon-scanner/internal/scheduler"
 )
@@ -19,6 +20,7 @@ type Scanner struct {
 	dns         *dns.Resolver
 	portScanner *portscanner.Scanner
 	scheduler   *scheduler.Scheduler
+	connPool    *pool.ConnectionPool
 }
 
 func New(cfg *config.Config, db *database.Database) *Scanner {
@@ -28,6 +30,7 @@ func New(cfg *config.Config, db *database.Database) *Scanner {
 		dns:         dns.New(cfg),
 		portScanner: portscanner.New(cfg),
 		scheduler:   scheduler.New(cfg),
+		connPool:    pool.NewConnectionPool(cfg),
 	}
 }
 
@@ -35,6 +38,7 @@ func (s *Scanner) Run(domains []string) error {
 	// Start the scheduler
 	s.scheduler.Start()
 	defer s.scheduler.Stop()
+	defer s.connPool.Close()
 	
 	// Log initial status
 	s.logCurrentStatus()
@@ -57,6 +61,9 @@ func (s *Scanner) Run(domains []string) error {
 		return fmt.Errorf("port scanning failed: %w", err)
 	}
 
+	// Log final statistics
+	s.logFinalStats()
+
 	return nil
 }
 
@@ -72,8 +79,18 @@ func (s *Scanner) logCurrentStatus() {
 	fmt.Printf("Workers: %d | Batch Size: %d | Delay: %v\n", 
 		profile.WorkerCount, profile.BatchSize, profile.RequestDelay)
 	
-	timeUntilChange := s.config.GetTimeUntilModeChange()
-	fmt.Printf("Time until mode change: %v\n\n", timeUntilChange)
+	if s.config.EnableHighPerformance {
+		fmt.Printf("High Performance Mode: ENABLED\n")
+		fmt.Printf("Memory Threshold: %.1f%% | Thermal Threshold: %.1f°C\n", 
+			s.config.MemoryThrottleThreshold*100, s.config.ThermalThrottleThreshold)
+		fmt.Printf("Connection Pool Size: %d | Max Connections/Host: %d\n", 
+			s.config.ConnectionPoolSize, s.config.MaxConnectionsPerHost)
+	} else {
+		timeUntilChange := s.config.GetTimeUntilModeChange()
+		fmt.Printf("Time until mode change: %v\n", timeUntilChange)
+	}
+	
+	fmt.Printf("\n")
 }
 
 func (s *Scanner) resolveDNS(domains []string) error {
@@ -311,8 +328,11 @@ func (s *Scanner) scanPortOnIPs(ips []string, port int) error {
 
 	// Process in batches with dynamic sizing
 	profile := s.config.GetCurrentProfile()
-	batchSize := profile.BatchSize
+	batchSize := s.scheduler.GetOptimalBatchSize(profile.BatchSize)
 	totalBatches := (len(unscannedIPs) + batchSize - 1) / batchSize
+	
+	fmt.Printf("Processing %d IPs in %d batches (batch size: %d)\n", 
+		len(unscannedIPs), totalBatches, batchSize)
 
 	for batchIndex := 0; batchIndex < totalBatches; batchIndex++ {
 		start := batchIndex * batchSize
@@ -322,6 +342,12 @@ func (s *Scanner) scanPortOnIPs(ips []string, port int) error {
 		}
 
 		batch := unscannedIPs[start:end]
+		
+		// Adjust batch size dynamically if in high performance mode
+		if s.config.EnableHighPerformance && batchIndex > 0 && batchIndex%10 == 0 {
+			batchSize = s.scheduler.GetOptimalBatchSize(profile.BatchSize)
+		}
+		
 		mode := s.config.GetModeString()
 		fmt.Printf("%s Scanning port %d - batch %d/%d (%d IPs)\n", 
 			mode, port, batchIndex+1, totalBatches, len(batch))
@@ -357,13 +383,17 @@ func (s *Scanner) scanPortBatch(ips []string, port int) error {
 			semaphore <- struct{}{} // Acquire
 			defer func() { <-semaphore }() // Release
 
+			s.scheduler.RecordRequest()
+			
 			result, err := s.portScanner.ScanPort(targetIP, port)
 			if err != nil {
+				s.scheduler.RecordError()
 				log.Printf("Failed to scan %s:%d: %v", targetIP, port, err)
 				return
 			}
 
 			if err := s.db.SavePort(result); err != nil {
+				s.scheduler.RecordError()
 				log.Printf("Failed to save port result %s:%d: %v", targetIP, port, err)
 			}
 
@@ -374,4 +404,44 @@ func (s *Scanner) scanPortBatch(ips []string, port int) error {
 
 	wg.Wait()
 	return nil
+}
+
+func (s *Scanner) logFinalStats() {
+fmt.Printf("\n📊 FINAL STATISTICS\n")
+fmt.Printf("===================\n")
+
+if s.config.EnableHighPerformance {
+health := s.scheduler.GetHealthMonitor().GetHealth()
+fmt.Printf("System Health:\n")
+fmt.Printf("  Memory Usage: %.1f%%\n", health.MemoryUsage*100)
+fmt.Printf("  CPU Temperature: %.1f°C\n", health.CPUTemperature)
+fmt.Printf("  Error Rate: %.2f%%\n", health.ErrorRate*100)
+fmt.Printf("  Goroutines: %d\n", health.GoroutineCount)
+fmt.Printf("  System Health: %v\n", health.IsHealthy)
+
+// Connection pool stats
+poolStats := s.connPool.GetStats()
+if summary, ok := poolStats["summary"].(map[string]interface{}); ok {
+fmt.Printf("\nConnection Pool:\n")
+fmt.Printf("  Total Pools: %v\n", summary["total_pools"])
+fmt.Printf("  Total Connections: %v\n", summary["total_connections"])
+fmt.Printf("  Active Connections: %v\n", summary["total_active"])
+fmt.Printf("  Idle Connections: %v\n", summary["total_idle"])
+}
+
+// Recent alerts
+if len(health.Alerts) > 0 {
+fmt.Printf("\nRecent Alerts:\n")
+count := len(health.Alerts)
+if count > 5 {
+count = 5
+}
+for i := len(health.Alerts) - count; i < len(health.Alerts); i++ {
+alert := health.Alerts[i]
+fmt.Printf("  [%s] %s\n", alert.Timestamp.Format("15:04:05"), alert.Message)
+}
+}
+}
+
+fmt.Printf("\n✅ Scan completed successfully!\n")
 }

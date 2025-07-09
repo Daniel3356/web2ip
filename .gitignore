@@ -1,0 +1,33 @@
+# Ignore build artifacts and runtime files
+web2ip
+*.log
+*.db
+*_output.log
+test_domains.csv
+top10milliondomains.csv.backup
+
+# Go specific
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
