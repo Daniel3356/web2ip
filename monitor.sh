@@ -3,31 +3,34 @@
 CSV="top10milliondomains.csv"
 DB="recon_results.db"
 
-# Get total domains (strip header if it exists)
 TOTAL=$(wc -l < "$CSV")
 if head -1 "$CSV" | grep -iq "domain"; then
     TOTAL=$((TOTAL - 1))
 fi
 
 while true; do
-    # Get processed domains from the DB
     DONE=$(sqlite3 "$DB" "SELECT COUNT(*) FROM domains;")
     [ -z "$DONE" ] && DONE=0
 
-    # Calculate percent
     if [ "$TOTAL" -gt 0 ]; then
         PERCENT=$(awk "BEGIN { printf \"%.2f\", ($DONE/$TOTAL)*100 }")
     else
         PERCENT="?"
     fi
 
-    # Estimate ETA in days
-    # Read the first and latest processed_at for timing
+    AVG_DNS_MS=$(sqlite3 "$DB" "SELECT AVG(dns_duration) FROM domains WHERE dns_duration > 0;")
+    AVG_PORT_MS=$(sqlite3 "$DB" "SELECT AVG(portscan_duration) FROM domains WHERE portscan_duration > 0;")
+    AVG_REV_MS=$(sqlite3 "$DB" "SELECT AVG(reverse_duration) FROM domains WHERE reverse_duration > 0;")
+
+    echo "Progress: $DONE / $TOTAL ($PERCENT%)"
+    echo "Average DNS time per domain: $AVG_DNS_MS ms"
+    echo "Average Port Scan time per domain: $AVG_PORT_MS ms"
+    echo "Average Reverse Lookup time per domain: $AVG_REV_MS ms"
+
     START_TIME=$(sqlite3 "$DB" "SELECT MIN(processed_at) FROM domains WHERE processed_at IS NOT NULL;")
     LAST_TIME=$(sqlite3 "$DB" "SELECT MAX(processed_at) FROM domains WHERE processed_at IS NOT NULL;")
 
     if [ -n "$START_TIME" ] && [ -n "$LAST_TIME" ] && [ "$DONE" -gt 10 ]; then
-        # Convert to seconds since epoch
         START_SEC=$(date -d "$START_TIME" +%s 2>/dev/null || gdate -d "$START_TIME" +%s)
         END_SEC=$(date -d "$LAST_TIME" +%s 2>/dev/null || gdate -d "$LAST_TIME" +%s)
         ELAPSED=$((END_SEC - START_SEC))
@@ -43,7 +46,6 @@ while true; do
         ETA_DAYS="estimating"
     fi
 
-    echo "Progress: $DONE / $TOTAL ($PERCENT%)"
     echo "Estimated time remaining: $ETA_DAYS days"
     echo "Last update: $(date)"
     echo "------------------------------"
