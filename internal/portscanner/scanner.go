@@ -27,7 +27,8 @@ func (s *Scanner) ScanPort(ip string, port int) (*database.PortResult, error) {
 		ProcessedAt: time.Now(),
 	}
 
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), s.config.Timeout)
+	profile := s.config.GetCurrentProfile()
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), profile.Timeout)
 	if err != nil {
 		return result, nil // Port is closed, not an error
 	}
