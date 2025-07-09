@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +18,14 @@ import (
 )
 
 func main() {
+	// Parse command line flags
+	var (
+		highPerformanceMode = flag.Bool("high-performance", false, "Enable high-performance mode with 800 workers")
+		detailedLogging     = flag.Bool("detailed-logging", false, "Enable detailed logging for monitoring")
+		configProfile       = flag.String("config", "auto", "Configuration profile: auto, conservation, fullpower, highperformance")
+	)
+	flag.Parse()
+	
 	// Set up logging with timestamps
 	logFile, err := os.OpenFile("recon.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -31,12 +40,50 @@ func main() {
 	log.Printf("Go Version: %s", runtime.Version())
 	log.Printf("Architecture: %s/%s", runtime.GOOS, runtime.GOARCH)
 	log.Printf("CPU Cores: %d", runtime.NumCPU())
+	log.Printf("High Performance Mode: %v", *highPerformanceMode)
+	log.Printf("Detailed Logging: %v", *detailedLogging)
 
 	fmt.Println("🚀 Recon Scanner System - Raspberry Pi 5 Optimized")
 	fmt.Printf("💻 Running on %s/%s with %d CPU cores\n", runtime.GOOS, runtime.GOARCH, runtime.NumCPU())
+	
+	if *highPerformanceMode {
+		fmt.Println("⚡ HIGH PERFORMANCE MODE ENABLED - 800 Workers")
+		fmt.Println("⚠️  WARNING: Ensure adequate cooling and monitor system resources!")
+	}
 
 	// Initialize configuration
 	cfg := config.New()
+	
+	// Apply command line overrides
+	if *highPerformanceMode {
+		cfg.EnableHighPerformanceMode = true
+		cfg.HighPerformanceSchedule.Enabled = true
+		fmt.Println("🔥 High-Performance Mode: 800 concurrent workers enabled")
+	}
+	
+	if *detailedLogging {
+		cfg.DetailedLogging = true
+		fmt.Println("📊 Detailed logging enabled")
+	}
+	
+	// Override configuration based on profile
+	switch *configProfile {
+	case "highperformance":
+		cfg.EnableHighPerformanceMode = true
+		cfg.HighPerformanceSchedule.Enabled = true
+		fmt.Println("🚀 Configuration: High-Performance mode forced")
+	case "conservation":
+		cfg.EnableHighPerformanceMode = false
+		fmt.Println("🌱 Configuration: Conservation mode forced")
+	case "fullpower":
+		cfg.EnableHighPerformanceMode = false
+		fmt.Println("🌙 Configuration: Full power mode (time-based)")
+	case "auto":
+		fmt.Println("🔄 Configuration: Auto mode (time-based)")
+	default:
+		fmt.Printf("❌ Unknown configuration profile: %s\n", *configProfile)
+		os.Exit(1)
+	}
 	
 	// Display current time zone and schedule
 	location, err := time.LoadLocation(cfg.Timezone)
@@ -90,6 +137,7 @@ func main() {
 
 	// Initialize scanner
 	scannerInstance := scanner.New(cfg, db)
+	defer scannerInstance.Close()
 
 	// Start the reconnaissance process
 	fmt.Println("🎯 Starting reconnaissance process...")

@@ -31,6 +31,15 @@ func New(cfg *config.Config, db *database.Database) *Scanner {
 	}
 }
 
+func (s *Scanner) Close() {
+	if s.portScanner != nil {
+		s.portScanner.Close()
+	}
+	if s.scheduler != nil {
+		s.scheduler.Stop()
+	}
+}
+
 func (s *Scanner) Run(domains []string) error {
 	// Start the scheduler
 	s.scheduler.Start()
@@ -39,6 +48,11 @@ func (s *Scanner) Run(domains []string) error {
 	// Log initial status
 	s.logCurrentStatus()
 	
+	// Start health monitoring in high-performance mode
+	if s.config.EnableHighPerformanceMode {
+		go s.healthMonitoringLoop()
+	}
+
 	fmt.Println("📋 Phase 1: DNS Resolution")
 	if err := s.resolveDNS(domains); err != nil {
 		return fmt.Errorf("DNS resolution failed: %w", err)
@@ -344,6 +358,47 @@ func (s *Scanner) scanPortOnIPs(ips []string, port int) error {
 	return nil
 }
 
+func (s *Scanner) healthMonitoringLoop() {
+	ticker := time.NewTicker(s.config.MetricsInterval)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			s.logSystemHealth()
+		}
+	}
+}
+
+func (s *Scanner) logSystemHealth() {
+	if !s.config.DetailedLogging {
+		return
+	}
+	
+	metrics := s.scheduler.GetSystemMetrics()
+	throttleLevel := s.scheduler.GetThrottleLevel()
+	
+	fmt.Printf("\n📊 === SYSTEM HEALTH REPORT ===\n")
+	fmt.Printf("🌡️  CPU Temperature: %.1f°C\n", metrics.CPUTemperature)
+	fmt.Printf("🧠 Memory Usage: %.1f%% (%.1f MB)\n", metrics.MemoryPercent*100, float64(metrics.MemoryUsage)/1024/1024)
+	fmt.Printf("🔄 Goroutines: %d\n", metrics.GoroutineCount)
+	fmt.Printf("✅ Success Rate: %.1f%% (%d/%d)\n", 
+		float64(metrics.SuccessCount)/float64(metrics.SuccessCount+metrics.ErrorCount)*100,
+		metrics.SuccessCount, metrics.SuccessCount+metrics.ErrorCount)
+	fmt.Printf("⚡ Throttle Level: %d%%\n", throttleLevel)
+	fmt.Printf("🚀 Current Mode: %s\n", s.config.GetModeString())
+	
+	// Add connection pool statistics if available
+	if s.portScanner != nil && s.config.EnableHighPerformanceMode {
+		// Here we would add connection pool stats if we had access to them
+		// For now, we'll just show that high-performance mode is active
+		fmt.Printf("🔗 Connection Pool: Active\n")
+	}
+	
+	fmt.Printf("⏰ Last Updated: %s\n", metrics.LastUpdateTime.Format("15:04:05"))
+	fmt.Printf("===============================\n\n")
+}
+
 func (s *Scanner) scanPortBatch(ips []string, port int) error {
 	profile := s.config.GetCurrentProfile()
 	
@@ -360,11 +415,16 @@ func (s *Scanner) scanPortBatch(ips []string, port int) error {
 			result, err := s.portScanner.ScanPort(targetIP, port)
 			if err != nil {
 				log.Printf("Failed to scan %s:%d: %v", targetIP, port, err)
+				s.scheduler.RecordError()
 				return
 			}
 
+			s.scheduler.RecordSuccess()
+			
 			if err := s.db.SavePort(result); err != nil {
 				log.Printf("Failed to save port result %s:%d: %v", targetIP, port, err)
+				s.scheduler.RecordError()
+				return
 			}
 
 			delay := s.scheduler.GetAdaptiveDelay(profile.RequestDelay)
