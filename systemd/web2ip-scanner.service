@@ -1,0 +1,36 @@
+[Unit]
+Description=Web2IP High-Performance Scanner
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/web2ip
+ExecStart=/home/pi/web2ip/web2ip -high-performance
+Restart=always
+RestartSec=10
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Resource limits for 8GB Pi 5
+MemoryMax=7G
+CPUQuota=90%
+
+# Logging
+StandardOutput=append:/var/log/web2ip/scanner.log
+StandardError=append:/var/log/web2ip/scanner.log
+SyslogIdentifier=web2ip-scanner
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/pi/web2ip
+ReadWritePaths=/var/log/web2ip
+
+[Install]
+WantedBy=multi-user.target
